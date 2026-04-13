@@ -1,0 +1,16 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Jarvis data (VERY IMPORTANT - do not upload)
+docs/
+db/
+
+# Secrets
+.env
+
+# Mac / Linux junk
+.DS_Store
+# Logs
+*.log

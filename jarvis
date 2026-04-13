@@ -1,0 +1,130 @@
+#!/bin/bash
+
+STREAMLIT_PORT=8501
+JARVIS_DIR="$HOME/jarvis"
+VENV_BIN="$JARVIS_DIR/.venv/bin"
+STREAMLIT_CMD="$VENV_BIN/streamlit"
+TUNNEL_NAME="jarvis"
+
+wait_for_port() {
+  local port="$1"
+  local tries=20
+  local i=1
+  while [ $i -le $tries ]; do
+    if lsof -i :"$port" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+    i=$((i + 1))
+  done
+  return 1
+}
+
+wait_for_tunnel() {
+  local tries=30
+  local i=1
+  while [ $i -le $tries ]; do
+    if cloudflared tunnel info "$TUNNEL_NAME" 2>/dev/null | grep -Eqi "active connection|CONNECTION"; then
+      return 0
+    fi
+    sleep 2
+    i=$((i + 1))
+  done
+  return 1
+}
+
+start_ollama() {
+  if pgrep -x "ollama" >/dev/null 2>&1; then
+    echo "🧠 Ollama already running"
+  else
+    echo "🧠 Starting Ollama..."
+    nohup ollama serve > "$JARVIS_DIR/ollama.log" 2>&1 &
+    sleep 3
+  fi
+}
+
+start_streamlit() {
+  echo "🌐 Starting Jarvis UI..."
+  pkill -f "streamlit run $JARVIS_DIR/app.py" 2>/dev/null
+  fuser -k ${STREAMLIT_PORT}/tcp >/dev/null 2>&1
+  nohup "$STREAMLIT_CMD" run "$JARVIS_DIR/app.py" --server.address 0.0.0.0 --server.port "$STREAMLIT_PORT" > "$JARVIS_DIR/streamlit.log" 2>&1 &
+  if wait_for_port "$STREAMLIT_PORT"; then
+    echo "✅ Streamlit is up on port $STREAMLIT_PORT"
+  else
+    echo "❌ ERROR: Streamlit did not start"
+    return 1
+  fi
+}
+
+start_tunnel() {
+  echo "☁️ Starting Cloudflare tunnel..."
+  pkill -f "cloudflared tunnel run $TUNNEL_NAME" 2>/dev/null
+  nohup cloudflared tunnel run "$TUNNEL_NAME" > "$JARVIS_DIR/tunnel.log" 2>&1 &
+  sleep 5
+  if wait_for_tunnel; then
+    echo "✅ Tunnel is connected"
+    return 0
+  else
+    echo "⚠️ Tunnel process started, but connection was not confirmed yet"
+    return 1
+  fi
+}
+
+show_status() {
+  echo ""
+  echo "📊 Status:"
+  pgrep -a ollama || echo "Ollama not running"
+  pgrep -a streamlit || echo "Streamlit not running"
+  pgrep -a cloudflared || echo "Tunnel not running"
+  echo ""
+  echo "📄 Logs:"
+  echo "  Streamlit: $JARVIS_DIR/streamlit.log"
+  echo "  Tunnel:    $JARVIS_DIR/tunnel.log"
+  echo "  Ollama:    $JARVIS_DIR/ollama.log"
+}
+
+case "$1" in
+  up)
+    echo "🚀 Starting Jarvis..."
+    cd "$JARVIS_DIR" || exit 1
+    start_ollama || exit 1
+    start_streamlit || exit 1
+
+    if ! start_tunnel; then
+      echo ""
+      echo "⚠️ Jarvis started locally, but tunnel was not confirmed."
+      echo "Check with: cloudflared tunnel info $TUNNEL_NAME"
+    else
+      echo ""
+      echo "✅ Jarvis startup finished"
+    fi
+
+    echo "🌍 Local:  http://100.77.229.32:${STREAMLIT_PORT}"
+    echo "🌍 Public: https://jarvis.redsystems.be"
+    show_status
+    ;;
+  down)
+    echo "🛑 Stopping Jarvis..."
+    pkill -f "cloudflared tunnel run $TUNNEL_NAME" 2>/dev/null
+    pkill -f "streamlit run $JARVIS_DIR/app.py" 2>/dev/null
+    pkill -x "ollama" 2>/dev/null
+    fuser -k ${STREAMLIT_PORT}/tcp >/dev/null 2>&1
+    echo "✅ Jarvis stopped"
+    ;;
+  restart)
+    "$0" down
+    sleep 2
+    "$0" up
+    ;;
+  status)
+    show_status
+    echo ""
+    cloudflared tunnel info "$TUNNEL_NAME" 2>/dev/null || true
+    ;;
+  logs)
+    tail -n 50 "$JARVIS_DIR/streamlit.log" "$JARVIS_DIR/tunnel.log" "$JARVIS_DIR/ollama.log" 2>/dev/null
+    ;;
+  *)
+    echo "Usage: jarvis {up|down|restart|status|logs}"
+    ;;
+esac
