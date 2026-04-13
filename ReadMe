@@ -1,0 +1,38 @@
+# Jarvis – Private AI Workspace
+
+Jarvis is a local, privacy-first AI assistant designed for internal knowledge, support workflows, and document-based intelligence.
+
+Built to run entirely on-premise with GPU acceleration.
+
+---
+
+## 🚀 Features
+
+- 🔒 100% local AI (no cloud dependency)
+- 📚 RAG (Retrieval-Augmented Generation) with your own documents
+- ⚡ Fast response with optimized models (Mistral, Qwen)
+- 🧠 Multi-model support via Ollama
+- 📄 Supports PDF, DOCX, XLSX, CSV, TXT, MD
+- 🏢 Designed for internal knowledge bases (CICS, support docs, etc.)
+
+---
+
+## 🧠 How it works
+
+1. Documents are ingested into a vector database (ChromaDB)
+2. Text is chunked and embedded
+3. Queries retrieve relevant context
+4. LLM (via Ollama) generates answers based on your data
+
+---
+
+## ⚙️ Setup
+
+```bash
+git clone https://github.com/alexmarculescu/jarvis.git
+cd jarvis
+
+python3 -m venv .venv
+source .venv/bin/activate
+
+pip install -r requirements.txt
